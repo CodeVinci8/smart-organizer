@@ -1,3 +1,8 @@
-.venv
+.venv/
 rm.txt
-practice
+practice/
+env/
+__pycache__/
+.idea/
+.vscode/
+*.log
