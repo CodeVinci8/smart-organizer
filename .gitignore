@@ -1,4 +1,6 @@
-.venv
+.venv/
+rm.txt
+practice/
 env/
 __pycache__/
 .idea/
