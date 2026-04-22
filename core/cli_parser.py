@@ -1,35 +1,50 @@
 import argparse
 
 
-def setup_parser():
-    parser = argparse.ArgumentParser(description="Smart File Organizer.")
+def setup_parser() -> argparse.ArgumentParser:
+    """РАБОТАЕТ С КОМАНДАМИ
+
+    Функция принимает имена команд, работает с путями, файлами и каталогами.
+    """
+    parser = argparse.ArgumentParser(
+        prog="Smart File Organizer",
+        description="Умная автоматизация порядка в ваших папках. "
+                    "Мгновенно сортирует файлы по категориям, типам и датам."
+    )
 
     parser.add_argument(
-        "--path",
+        "-p", "--path",
+        type=str,
         required=True,
-        type = str,
         help="Путь к папке, которую сортируем."
     )
 
     parser.add_argument(
-        "--config",
+        "-c", "--config",
         type=str,
         default="config.json",
         help="Путь к JSON-файлу."
     )
 
     parser.add_argument(
-        "--dry-run",
+        "-d", "--dry-run",
         action="store_true",
         help="Вывод плана действий."
     )
 
     parser.add_argument(
-        "--verbose",
+        "-v", "--verbose",
         action="store_true",
         help="Включает подробный вывод."
     )
 
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        type=str,
+        default="INFO",
+        help="Логи для настройки или отладки системы."
+    )
     return parser
 
 
