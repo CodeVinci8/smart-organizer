@@ -29,7 +29,7 @@ def setup_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-d", "--dry-run",
         action="store_true",
-        help="Вывод плана действий."
+        help="Вывод плана действий (предпросмотр)."
     )
 
     parser.add_argument(
