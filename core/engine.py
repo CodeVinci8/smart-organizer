@@ -1,5 +1,8 @@
-from pathlib import Path
+import json
 import shutil
+
+
+from pathlib import Path
 
 
 def scan_directory(path: Path) -> list[Path]:
@@ -34,4 +37,37 @@ def move_file(src: Path, dest_dir: Path, dry_run: bool) -> None:
         print(f"[DRY RUN] {src} -> {destination}")
     else:
         shutil.move(str(src), str(destination))
+
+
+def load_config(path: Path) -> dict:
+    """Умное чтение json-конфигурации
+
+    Функция принимает путь к файлу с конфигурацией, читает ее и возвращает словарь.
+    Из-за сложности прописания каждого Ключа - расширения, вида: Папка: ["Список расширений"],
+    написан скрипт, который не только читает конфиг, но и перезаписывает конфиг в виде:
+    Расширение: Папка"""
+    if not path.exists():
+        raise FileNotFoundError("Директория или файл не найдены.")
+
+    with open(path, "r", encoding="utf-8") as file:
+        try:
+            data = json.load(file)
+            if isinstance(data, dict):
+                normalized = {}
+
+                for folder, extension in data.items():
+                    if isinstance(folder, str) and isinstance(extension, list):
+
+                        for ext in extension:
+                            ext_norm = ext.lower() if ext.startswith(".") else f".{ext.lower()}"
+                            normalized[ext_norm] = folder
+                    else:
+                        raise ValueError("Все значения должны быть списками")
+            else:
+                raise ValueError("Конфиг JSON не является словарем.")
+
+            return normalized
+
+        except json.JSONDecodeError:
+            raise ValueError("В конфиге JSON содержится ошибка.")
 
