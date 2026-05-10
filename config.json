@@ -1,6 +1,6 @@
 {
   "Images": [".jpg", ".png"],
   "Documents": [".docx", ".pdf", ".txt", ".md"],
-  "archives": [".zip", ".rar"]
+  "Archives": [".zip", ".rar"]
 }
 

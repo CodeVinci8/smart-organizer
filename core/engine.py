@@ -23,24 +23,25 @@ def scan_directory(path: Path) -> list[Path]:
 
 
 def move_file(src: Path, dest_dir: Path, dry_run: bool) -> None:
-    """Перемещает файлы
+    """ПЕРЕМЕЩАЕТ ФАЙЛЫ
 
     Функция перемещает файл в папку назначения
     """
     if not src.is_file():
         raise ValueError("Указанный путь не ведёт к файлу.")
 
-    dest_dir.mkdir(parents=True, exist_ok=True)
     destination = dest_dir / src.name
 
     if dry_run:
         print(f"[DRY RUN] {src} -> {destination}")
-    else:
-        shutil.move(str(src), str(destination))
+        return
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(destination))
 
 
 def load_config(path: Path) -> dict:
-    """Умное чтение json-конфигурации
+    """УМНОЕ ЧТЕНИЕ JSON-КОНФИГУРАЦИИ
 
     Функция принимает путь к файлу с конфигурацией, читает ее и возвращает словарь.
     Из-за сложности прописания каждого Ключа - расширения, вида: Папка: ["Список расширений"],
@@ -70,4 +71,33 @@ def load_config(path: Path) -> dict:
 
         except json.JSONDecodeError:
             raise ValueError("В конфиге JSON содержится ошибка.")
+
+
+def organize_files(source: Path, config: dict, dry_run: bool) -> None:
+    """ОРГАНИЗОВЫВАЕТ И СОРТИРУЕТ ФАЙЛЫ ПО РАСШИРЕНИЯМ
+
+    Функция получает путь к каталогу, идет по нему и достает список абсолютных
+    путей к каждому файлу, принимает Конфиг, далее если в конфиге есть у расширения: папка,
+    то добавляет файл туда, если нет то создает папку "Другое" если файл уже есть в папке, то пропускает.
+    """
+    if not source.exists():
+        raise FileNotFoundError("Директория не найдена.")
+    elif not source.is_dir():
+        raise ValueError("Путь ведёт не к каталогу.")
+
+    files = scan_directory(source)
+
+    for file_path in files:
+        extension = file_path.suffix.lower()
+        target_folder = config.get(extension)
+
+        if target_folder is None:
+            target_folder = "Other"
+
+        dest_dir = source.resolve() / target_folder
+
+        if file_path.parent == dest_dir:
+            continue
+
+        move_file(file_path, dest_dir, dry_run)
 
