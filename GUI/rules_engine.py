@@ -1,6 +1,7 @@
 import re
 # from typing import List, Dict, Optional
 from rules import BaseRule, RegexRule, ExtensionRule
+# тут будет распределитель правил и их применение
 
 
 class EngineRules:
