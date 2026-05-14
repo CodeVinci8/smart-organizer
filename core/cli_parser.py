@@ -42,13 +42,7 @@ def setup_parser() -> argparse.ArgumentParser:
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         type=str,
-        default="INFO",
         help="Логи для настройки или отладки системы."
     )
     return parser
 
-
-if __name__ == "__main__":
-    parser = setup_parser()
-    args = parser.parse_args()
-    print(args)

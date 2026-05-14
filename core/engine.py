@@ -48,7 +48,7 @@ def load_config(path: Path) -> dict:
     написан скрипт, который не только читает конфиг, но и перезаписывает конфиг в виде:
     Расширение: Папка"""
     if not path.exists():
-        raise FileNotFoundError("Директория или файл не найдены.")
+        raise FileNotFoundError("Директория или файл конфига не найдены.")
 
     with open(path, "r", encoding="utf-8") as file:
         try:
