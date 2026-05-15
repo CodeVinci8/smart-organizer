@@ -13,7 +13,7 @@ def scan_directory(path: Path) -> list[Path]:
     files_path = []
 
     if (not path.exists()) or (not path.is_dir()):
-        raise FileNotFoundError("Директория не найдена.")
+        raise FileNotFoundError("The directory was not found.")
 
     for i_path in path.rglob("*"):
         if i_path.is_file():
@@ -28,7 +28,7 @@ def move_file(src: Path, dest_dir: Path, dry_run: bool) -> None:
     Функция перемещает файл в папку назначения
     """
     if not src.is_file():
-        raise ValueError("Указанный путь не ведёт к файлу.")
+        raise ValueError("The specified path does not lead to the file.")
 
     destination = dest_dir / src.name
 
@@ -48,7 +48,7 @@ def load_config(path: Path) -> dict:
     написан скрипт, который не только читает конфиг, но и перезаписывает конфиг в виде:
     Расширение: Папка"""
     if not path.exists():
-        raise FileNotFoundError("Директория или файл конфига не найдены.")
+        raise FileNotFoundError("The directory or config file was not found.")
 
     with open(path, "r", encoding="utf-8") as file:
         try:
@@ -63,14 +63,14 @@ def load_config(path: Path) -> dict:
                             ext_norm = ext.lower() if ext.startswith(".") else f".{ext.lower()}"
                             normalized[ext_norm] = folder
                     else:
-                        raise ValueError("Все значения должны быть списками")
+                        raise ValueError("All values should be lists")
             else:
-                raise ValueError("Конфиг JSON не является словарем.")
+                raise ValueError("The JSON config is not a dictionary.")
 
             return normalized
 
         except json.JSONDecodeError:
-            raise ValueError("В конфиге JSON содержится ошибка.")
+            raise ValueError("The JSON config contains an error.")
 
 
 def organize_files(source: Path, config: dict, dry_run: bool) -> None:
@@ -81,9 +81,9 @@ def organize_files(source: Path, config: dict, dry_run: bool) -> None:
     то добавляет файл туда, если нет то создает папку "Другое" если файл уже есть в папке, то пропускает.
     """
     if not source.exists():
-        raise FileNotFoundError("Директория не найдена.")
+        raise FileNotFoundError("The directory was not found.")
     elif not source.is_dir():
-        raise ValueError("Путь ведёт не к каталогу.")
+        raise ValueError("The path does not lead to the directory.")
 
     files = scan_directory(source)
 

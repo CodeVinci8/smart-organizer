@@ -44,5 +44,11 @@ def setup_parser() -> argparse.ArgumentParser:
         type=str,
         help="Логи для настройки или отладки системы."
     )
+
+    parser.add_argument(
+        "-f", "--log-file",
+        type=str,
+        help = "Путь к файлу, куда нужно сохранять логи."
+    )
     return parser
 
