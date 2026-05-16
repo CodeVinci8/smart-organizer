@@ -25,12 +25,19 @@ def scan_directory(path: Path) -> list[Path]:
 def move_file(src: Path, dest_dir: Path, dry_run: bool) -> None:
     """ПЕРЕМЕЩАЕТ ФАЙЛЫ
 
-    Функция перемещает файл в папку назначения
+    Функция перемещает файл в папку назначения. Если файл уже создан,
+    переместит другой файл с добавлением цифры в названии.
     """
     if not src.is_file():
         raise ValueError("The specified path does not lead to the file.")
 
     destination = dest_dir / src.name
+
+    counter = 1
+
+    while destination.exists():
+        destination = dest_dir / f"{src.stem}_{counter}{src.suffix}"
+        counter += 1
 
     if dry_run:
         print(f"[DRY RUN] {src} -> {destination}")
