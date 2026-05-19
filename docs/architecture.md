@@ -5,14 +5,12 @@
 проводника
 
 ## Основные классы
-- File
-- FileManager
-- GUI
+- BaseRule
+- ExtensionRules
+- RegexRules
 
 ## Связи
-- FileManager содержит список файлов:
-file: list[File]
-- GUI использует FileManager для отображения данных
-
-## Пример структуры 
-[GUI] ---> [FileManager] ---> [Task]
+- BaseRule базовый класс для правил
+- ExtensionRules класс для правил с расширениями
+- RegexRules класс для работы с именами и патернами имен
+- EngineRules менеджер работы с правилами, добавляет правила и решает куда какое использовать
