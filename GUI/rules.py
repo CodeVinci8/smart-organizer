@@ -1,46 +1,67 @@
 from abc import ABC, abstractmethod
+from typing import List
 import re
-from pathlib import Path
 
 
+# класс базовое правило, получает нахождение файла
 class BaseRule(ABC):
-    """Базовый класс для всех правил сортировки"""
+    destination: str  # у каждого класса будет такой атрибут
 
-    def __init__(self, destination: str):
-        self.destination = destination  # папка, куда будем перемещать файл
+    def __init__(self, destination: str):  # параметр классов
+        self.destination = destination
 
     @abstractmethod
-    def match(self, filename: str) -> bool:
-        """Проверяет, подходит ли файл под это правило"""
+    def if_match(self, filename: str):
         pass
 
 
+# класс работает с расширениями
 class ExtensionRule(BaseRule):
-    """Правило сортировки по расширению (.jpg, .pdf и т.д.)"""
-
-    def __init__(self, extensions: list, destination: str):
+    def __init__(self, extensions: List[str], destination: str):
         super().__init__(destination)
-        # Приводим все расширения к нижнему регистру и добавляем точку
-        self.extensions = []
-        for ext in extensions:
-            if not ext.startswith('.'):
-                ext = '.' + ext
-            self.extensions.append(ext.lower())
+        self. extensions: List[str] = [ext.lower() for ext in extensions]
 
-    def match(self, filename: str) -> bool:
-        """Проверяем расширение файла"""
-        ext = Path(filename).suffix.lower()
-        return ext in self.extensions
+    def if_match(self, filename: str) -> bool:
+        if not filename:
+            return False
+
+        match = re.search(r'\.([^\.]+)$', filename)  # поиск расширения в конце строки
+        if not match:
+            return False
+
+        file_ext = match.group(0).lower()
+        return file_ext in self.extensions
 
 
+# класс работает с регулярными выражениями, а именно с именами файлов
 class RegexRule(BaseRule):
-    """Правило сортировки по регулярному выражению"""
-
-    def __init__(self, pattern: str, destination: str):
+    def __init__(self, names: List[str], destination: str, patern: str):
         super().__init__(destination)
-        self.pattern = re.compile(pattern, re.IGNORECASE)  # компилируем регулярку
+        self.patern = patern
+        self.names: List[str] = [n.lower() for n in names]  # список имен
 
-    def match(self, filename: str) -> bool:
-        """Проверяем совпадение по регулярному выражению"""
-        return bool(self.pattern.search(filename))
+    def if_match(self, filename: str) -> bool:
+        if not filename:
+            return False
+
+        match = re.search(self.patern, filename)
+        # тут можно жестко самому прописать правило, а можно чисто патерн принимающий правила
+
+        if not match:
+            return False
+
+        name = match.group(0).lower()
+        return name in self.names
+
+
+# делаю менеджер задач, он же класс контейнер
+class RulesEngine:
+    def __init__(self):
+        self.rules: List[BaseRule] = []
+
+    def add_rule(self, rule: BaseRule):
+        self.rules.append(rule)
+
+    def add_rules(self, rule: List[BaseRule]):
+        self.rules.extend(rule)
 
