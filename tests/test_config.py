@@ -1,37 +1,58 @@
 import json
+
 import pytest
 
-from core.engine import load_config
+from file_atelier.config import ConfigError, load_config, validate_config
 
 
-def test_load_valid_config(tmp_path):
-    data = {
-        "Images": [".jpg", "png"],
-        "Documents": [".pdf"]
+def test_load_valid_config_normalizes_extensions(tmp_path):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps({"Изображения": ["JPG", ".PNG"], "Документы": ["pdf"]}),
+        encoding="utf-8",
+    )
+
+    assert load_config(config_path) == {
+        ".jpg": "Изображения",
+        ".png": "Изображения",
+        ".pdf": "Документы",
     }
 
+
+def test_load_config_reports_missing_file(tmp_path):
+    with pytest.raises(ConfigError, match="не найден"):
+        load_config(tmp_path / "missing.json")
+
+
+def test_load_config_reports_damaged_json(tmp_path):
     config_path = tmp_path / "config.json"
-    json_data = json.dumps(data)
-    config_path.write_text(json_data, encoding="utf-8")
+    config_path.write_text("{bad json", encoding="utf-8")
 
-    result = load_config(config_path)
-
-    assert result[".jpg"] == "Images"
-    assert result[".png"] == "Images"
-    assert result[".pdf"] == "Documents"
+    with pytest.raises(ConfigError, match="Повреждён JSON"):
+        load_config(config_path)
 
 
-def test_load_missing_file(tmp_path):
-    missing_path = tmp_path / "missing.json"
+@pytest.mark.parametrize("category", ["", ".", "..", "../снаружи", "/tmp/снаружи", "C:\\снаружи"])
+def test_rejects_forbidden_category(category):
+    with pytest.raises(ConfigError):
+        validate_config({category: [".txt"]})
 
-    with pytest.raises(FileNotFoundError):
-        load_config(missing_path)
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [],
+        {"Документы": []},
+        {"Документы": ".txt"},
+        {"Документы": [""]},
+        {"Документы": [1]},
+    ],
+)
+def test_rejects_invalid_config_shape(data):
+    with pytest.raises(ConfigError):
+        validate_config(data)
 
 
-def test_load_invalid_json(tmp_path):
-    invalid_json_path = tmp_path / "invalid.json"
-    invalid_json_path.write_text("{bad json", encoding="utf-8")
-
-    with pytest.raises(ValueError):
-        load_config(invalid_json_path)
-
+def test_rejects_extension_assigned_to_different_categories():
+    with pytest.raises(ConfigError, match="указано в категориях"):
+        validate_config({"Тексты": ["TXT"], "Документы": [".txt"]})
