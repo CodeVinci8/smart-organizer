@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "file-atelier"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Безопасная сортировка файлов по расширениям"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,12 +15,19 @@ dev = [
     "pytest>=8,<10",
     "ruff>=0.11,<1",
 ]
+build = [
+    "pyinstaller>=6.10,<7",
+]
 
 [project.scripts]
 file-atelier = "file_atelier.cli:main"
+file-atelier-gui = "file_atelier.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "file_atelier.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
