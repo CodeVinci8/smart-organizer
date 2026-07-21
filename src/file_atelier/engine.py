@@ -8,6 +8,8 @@ from pathlib import Path, PurePosixPath
 class MoveOperation:
     source: Path
     destination: Path
+    category: str
+    conflict: bool
 
 
 @dataclass(frozen=True)
@@ -78,13 +80,15 @@ def _path_exists(path: Path) -> bool:
     return os.path.lexists(path)
 
 
-def _available_destination(source: Path, directory: Path, reserved: set[str]) -> Path:
+def _available_destination(source: Path, directory: Path, reserved: set[str]) -> tuple[Path, bool]:
     destination = directory / source.name
     counter = 1
+    conflict = False
     while _path_exists(destination) or _path_key(destination) in reserved:
+        conflict = True
         destination = directory / f"{source.stem}_{counter}{source.suffix}"
         counter += 1
-    return destination
+    return destination, conflict
 
 
 def build_plan(source: Path, config: dict[str, str], recursive: bool = False) -> SortingPlan:
@@ -106,9 +110,9 @@ def build_plan(source: Path, config: dict[str, str], recursive: bool = False) ->
             skipped += 1
             continue
 
-        destination = _available_destination(file_path, destination_directory, reserved)
+        destination, conflict = _available_destination(file_path, destination_directory, reserved)
         reserved.add(_path_key(destination))
-        operations.append(MoveOperation(file_path, destination))
+        operations.append(MoveOperation(file_path, destination, category, conflict))
 
     return SortingPlan(source, tuple(operations), skipped)
 
