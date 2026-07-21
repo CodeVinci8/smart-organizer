@@ -42,6 +42,8 @@ def _scan_files(source: Path, recursive: bool) -> tuple[list[Path], int]:
             root_path = Path(root)
             safe_directories: list[str] = []
             for name in directory_names:
+                if name == ".file-atelier":
+                    continue
                 directory = root_path / name
                 if directory.is_symlink():
                     skipped += 1
@@ -137,6 +139,27 @@ def _move_without_overwrite(source: Path, destination: Path) -> None:
         raise
 
 
+def execute_operation(source_root: Path, operation: MoveOperation) -> None:
+    """Выполняет одну проверенную операцию без перехода по ссылкам и перезаписи."""
+    source_root = source_root.resolve()
+    if operation.source.is_symlink() or not operation.source.is_file():
+        raise OSError("источник исчез или перестал быть обычным файлом")
+
+    try:
+        operation.source.resolve().relative_to(source_root)
+        operation.destination.resolve(strict=False).relative_to(source_root)
+    except ValueError as error:
+        raise OSError("операция выходит за пределы исходного каталога") from error
+
+    operation.destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        operation.destination.parent.resolve().relative_to(source_root)
+    except ValueError as error:
+        raise OSError("каталог назначения оказался за пределами исходного каталога") from error
+
+    _move_without_overwrite(operation.source, operation.destination)
+
+
 def execute_plan(plan: SortingPlan) -> ExecutionSummary:
     """Выполняет неизменяемый план и возвращает каждую ошибку вызывающей стороне."""
     moved = 0
@@ -144,19 +167,7 @@ def execute_plan(plan: SortingPlan) -> ExecutionSummary:
 
     for operation in plan.operations:
         try:
-            if operation.source.is_symlink() or not operation.source.is_file():
-                raise OSError("источник исчез или перестал быть обычным файлом")
-
-            operation.destination.parent.mkdir(parents=True, exist_ok=True)
-            resolved_parent = operation.destination.parent.resolve()
-            try:
-                resolved_parent.relative_to(plan.source)
-            except ValueError as error:
-                raise OSError(
-                    "каталог назначения оказался за пределами исходного каталога"
-                ) from error
-
-            _move_without_overwrite(operation.source, operation.destination)
+            execute_operation(plan.source, operation)
             moved += 1
         except OSError as error:
             errors.append(f"{operation.source} -> {operation.destination}: {error}")

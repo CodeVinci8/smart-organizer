@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox, ttk
 from file_atelier import __version__
 from file_atelier.engine import ExecutionSummary, SortingPlan
 from file_atelier.gui_state import GuiSession, GuiStateError
+from file_atelier.history import HistoryError, UndoPlan
 
 
 class DesktopLaunchError(RuntimeError):
@@ -37,6 +38,7 @@ class FileAtelierApp:
         self.planned_var = tk.StringVar(value="Запланировано: 0")
         self.skipped_var = tk.StringVar(value="Пропущено: 0")
         self.conflicts_var = tk.StringVar(value="Конфликты: 0")
+        self.history_var = tk.StringVar(value="Выберите исходный каталог, чтобы проверить историю.")
 
         self._configure_window()
         self._configure_styles()
@@ -47,8 +49,8 @@ class FileAtelierApp:
 
     def _configure_window(self) -> None:
         self.root.title(f"File Atelier {__version__}")
-        self.root.geometry("1120x760")
-        self.root.minsize(940, 680)
+        self.root.geometry("1120x840")
+        self.root.minsize(940, 760)
         self.root.configure(background=self.BACKGROUND)
 
     def _configure_styles(self) -> None:
@@ -140,7 +142,7 @@ class FileAtelierApp:
         container = ttk.Frame(self.root, style="App.TFrame", padding=(28, 22, 28, 22))
         container.pack(fill="both", expand=True)
         container.columnconfigure(0, weight=1)
-        container.rowconfigure(2, weight=1)
+        container.rowconfigure(3, weight=1)
 
         header = ttk.Frame(container, style="App.TFrame")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
@@ -210,8 +212,46 @@ class FileAtelierApp:
         )
         self.preview_button.pack(side="right", padx=(0, 8))
 
+        history_card = ttk.Frame(container, style="Card.TFrame", padding=(18, 12))
+        history_card.grid(row=2, column=0, sticky="ew", pady=(0, 14))
+        history_card.columnconfigure(1, weight=1)
+        ttk.Label(history_card, text="История", style="CardTitle.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 18)
+        )
+        ttk.Label(
+            history_card,
+            textvariable=self.history_var,
+            style="Card.TLabel",
+            wraplength=500,
+        ).grid(row=0, column=1, sticky="w")
+        self.history_refresh_button = ttk.Button(
+            history_card,
+            text="Обновить сведения",
+            command=self._refresh_history_info,
+            style="Secondary.TButton",
+            takefocus=True,
+        )
+        self.history_refresh_button.grid(row=0, column=2, padx=(12, 8))
+        self.undo_preview_button = ttk.Button(
+            history_card,
+            text="Предпросмотр отмены",
+            command=self._preview_undo,
+            style="Secondary.TButton",
+            takefocus=True,
+        )
+        self.undo_preview_button.grid(row=0, column=3, padx=(0, 8))
+        self.undo_button = ttk.Button(
+            history_card,
+            text="Подтвердить отмену",
+            command=self._apply_undo,
+            style="Primary.TButton",
+            state="disabled",
+            takefocus=True,
+        )
+        self.undo_button.grid(row=0, column=4)
+
         plan_card = ttk.Frame(container, style="Card.TFrame", padding=18)
-        plan_card.grid(row=2, column=0, sticky="nsew")
+        plan_card.grid(row=3, column=0, sticky="nsew")
         plan_card.columnconfigure(0, weight=1)
         plan_card.rowconfigure(2, weight=1)
 
@@ -266,7 +306,7 @@ class FileAtelierApp:
 
         ttk.Label(
             container, textvariable=self.error_var, style="Error.TLabel", wraplength=1040
-        ).grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        ).grid(row=4, column=0, sticky="ew", pady=(12, 0))
 
     def _bind_inputs(self) -> None:
         self.source_var.trace_add("write", self._inputs_changed)
@@ -286,11 +326,13 @@ class FileAtelierApp:
         if had_plan and self.session.plan is None:
             self.apply_button.configure(state="disabled")
             self.summary_var.set("Параметры изменены. Обновите план перед применением.")
+        self.undo_button.configure(state="disabled")
 
     def _choose_source(self) -> None:
         selected = filedialog.askdirectory(title="Выберите каталог для сортировки")
         if selected:
             self.source_var.set(selected)
+            self._refresh_history_info()
 
     def _choose_config(self) -> None:
         selected = filedialog.askopenfilename(
@@ -305,10 +347,16 @@ class FileAtelierApp:
         self.root.configure(cursor="watch" if busy else "")
         self.preview_button.configure(state="disabled" if busy else "normal")
         self.refresh_button.configure(state="disabled" if busy else "normal")
+        self.history_refresh_button.configure(state="disabled" if busy else "normal")
+        self.undo_preview_button.configure(state="disabled" if busy else "normal")
         if busy or not self.session.can_apply:
             self.apply_button.configure(state="disabled")
         else:
             self.apply_button.configure(state="normal")
+        if busy or not self.session.can_undo:
+            self.undo_button.configure(state="disabled")
+        else:
+            self.undo_button.configure(state="normal")
         self.root.update_idletasks()
 
     def _clear_table(self) -> None:
@@ -319,6 +367,7 @@ class FileAtelierApp:
         if self.busy:
             return
         self._sync_inputs()
+        self.undo_button.configure(state="disabled")
         self._set_busy(True)
         self.error_var.set("Ошибок нет.")
         try:
@@ -361,6 +410,7 @@ class FileAtelierApp:
                 "Перемещать нечего: каталог уже упорядочен или не содержит файлов."
             )
         self.apply_button.configure(state="normal" if self.session.can_apply else "disabled")
+        self.undo_button.configure(state="disabled")
 
     def _apply(self) -> None:
         if self.busy or not self.session.can_apply or self.session.plan is None:
@@ -386,7 +436,8 @@ class FileAtelierApp:
         try:
             summary = self.session.apply()
             self._render_execution(plan, summary)
-        except (GuiStateError, ValueError, OSError) as error:
+            self._refresh_history_info()
+        except (GuiStateError, HistoryError, ValueError, OSError) as error:
             self.error_var.set(f"Ошибка: {error}")
             self.summary_var.set("Сортировка не завершена.")
         finally:
@@ -395,7 +446,13 @@ class FileAtelierApp:
     def _render_execution(self, plan: SortingPlan, summary: ExecutionSummary) -> None:
         for index, operation in enumerate(plan.operations):
             failed = any(error.startswith(f"{operation.source} ->") for error in summary.errors)
-            self.tree.set(str(index), "status", "Ошибка" if failed else "Перемещён")
+            if failed:
+                status = "Ошибка"
+            elif not operation.source.exists() and operation.destination.exists():
+                status = "Перемещён"
+            else:
+                status = "Не выполнен"
+            self.tree.set(str(index), "status", status)
 
         if summary.errors:
             self.error_var.set("Ошибки операций:\n" + "\n".join(summary.errors))
@@ -406,6 +463,104 @@ class FileAtelierApp:
             f"пропущено {summary.skipped}, ошибок {len(summary.errors)}."
         )
         self.apply_button.configure(state="disabled")
+
+    def _refresh_history_info(self) -> None:
+        self._sync_inputs()
+        try:
+            info = self.session.history_info()
+        except (HistoryError, OSError, ValueError) as error:
+            self.history_var.set(f"Ошибка истории: {error}")
+            self.undo_button.configure(state="disabled")
+            return
+        if info is None:
+            self.history_var.set("История для выбранного каталога не найдена.")
+            self.undo_button.configure(state="disabled")
+            return
+        status_names = {
+            "in_progress": "выполняется",
+            "completed": "завершена",
+            "partial": "частично завершена",
+            "failed": "ошибка",
+            "undo_failed": "ошибка отмены",
+            "undone": "отменена",
+        }
+        status = status_names.get(info.status, info.status)
+        self.history_var.set(f"{info.created_at} · перемещено: {info.moved} · статус: {status}")
+
+    def _preview_undo(self) -> None:
+        if self.busy:
+            return
+        self._sync_inputs()
+        self._set_busy(True)
+        self.error_var.set("Ошибок нет.")
+        try:
+            plan = self.session.build_undo()
+            self._render_undo_plan(plan)
+            self._refresh_history_info()
+        except (GuiStateError, HistoryError, OSError, ValueError) as error:
+            self._clear_table()
+            self.error_var.set(f"Ошибка отмены: {error}")
+            self.summary_var.set("План отмены не построен.")
+            self.undo_button.configure(state="disabled")
+        finally:
+            self._set_busy(False)
+
+    def _render_undo_plan(self, plan: UndoPlan) -> None:
+        self._clear_table()
+        for index, operation in enumerate(plan.operations):
+            destination = operation.original.relative_to(plan.source)
+            status = operation.conflict or "Готово к отмене"
+            tags = ("conflict",) if operation.conflict else ()
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                values=(operation.current.name, "Отмена", destination, status),
+                tags=tags,
+            )
+        self.planned_var.set(f"Запланировано: {len(plan.operations)}")
+        self.skipped_var.set("Пропущено: 0")
+        self.conflicts_var.set(f"Конфликты: {len(plan.conflicts)}")
+        if plan.conflicts:
+            self.summary_var.set("Отмена заблокирована. Устраните конфликты, указанные в таблице.")
+        else:
+            self.summary_var.set("Предпросмотр отмены готов. Файлы ещё не изменены.")
+        self.apply_button.configure(state="disabled")
+        self.undo_button.configure(state="normal" if self.session.can_undo else "disabled")
+
+    def _apply_undo(self) -> None:
+        if self.busy or not self.session.can_undo or self.session.undo_plan is None:
+            self.error_var.set("Ошибка: сначала постройте безопасный план отмены без конфликтов.")
+            return
+        plan = self.session.undo_plan
+        confirmed = messagebox.askyesno(
+            "Подтверждение отмены",
+            f"Вернуть файлов на исходные места: {len(plan.operations)}?",
+            parent=self.root,
+        )
+        if not confirmed:
+            return
+
+        self._set_busy(True)
+        self.summary_var.set("Выполняется отмена. Повторный запуск временно заблокирован…")
+        try:
+            summary = self.session.undo()
+            for index in range(len(plan.operations)):
+                self.tree.set(str(index), "status", "Возвращён")
+            if summary.errors:
+                self.error_var.set("Ошибки отмены:\n" + "\n".join(summary.errors))
+            else:
+                self.error_var.set("Ошибок нет.")
+            self.summary_var.set(
+                f"Отмена завершена: возвращено {summary.moved}, ошибок {len(summary.errors)}."
+            )
+            self._refresh_history_info()
+        except (GuiStateError, HistoryError, OSError, ValueError) as error:
+            self.error_var.set(f"Ошибка отмены: {error}")
+            self.summary_var.set("Отмена не завершена.")
+        finally:
+            self.undo_button.configure(state="disabled")
+            self._set_busy(False)
 
 
 def run_app() -> None:
