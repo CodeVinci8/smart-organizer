@@ -6,7 +6,14 @@ from pathlib import Path
 
 from file_atelier import __version__
 from file_atelier.config import ConfigError, load_config
-from file_atelier.engine import ExecutionSummary, SortingPlan, build_plan, execute_plan
+from file_atelier.engine import ExecutionSummary, SortingPlan, build_plan
+from file_atelier.history import (
+    HistoryError,
+    UndoPlan,
+    apply_plan_with_history,
+    build_undo_plan,
+    execute_undo,
+)
 
 
 class RussianArgumentParser(argparse.ArgumentParser):
@@ -43,9 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
         "-h", "--help", action="help", help="Показать эту справку и завершить работу."
     )
     parser.add_argument(
+        "source",
+        nargs="?",
+        metavar="КАТАЛОГ",
+        help="Исходный каталог; нужен для краткой формы команды отмены.",
+    )
+    parser.add_argument(
         "-p",
         "--path",
-        required=True,
         metavar="КАТАЛОГ",
         help="Каталог, файлы в котором нужно отсортировать.",
     )
@@ -70,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Явно выбрать предпросмотр без изменений (это режим по умолчанию).",
     )
 
+    parser.add_argument(
+        "--undo-last",
+        action="store_true",
+        help="Построить план отмены последней сортировки выбранного каталога.",
+    )
     parser.add_argument(
         "-r",
         "--recursive",
@@ -159,9 +176,82 @@ def _print_summary(summary: ExecutionSummary) -> None:
     )
 
 
+def _print_undo_plan(plan: UndoPlan, apply: bool) -> None:
+    mode = "применение отмены" if apply else "предпросмотр отмены; файлы не изменяются"
+    print(f"Режим: {mode}.")
+    print(f"Операция: {plan.operation_id}.")
+    print("План обратных перемещений:")
+    for operation in plan.operations:
+        current = _display_path(operation.current, plan.source)
+        original = _display_path(operation.original, plan.source)
+        status = f"конфликт: {operation.conflict}" if operation.conflict else "готово"
+        print(f"  {current} -> {original} [{status}]")
+
+
+def _resolve_source(parser: argparse.ArgumentParser, args: argparse.Namespace) -> Path:
+    if args.path and args.source:
+        parser.error("параметр --path и позиционный КАТАЛОГ нельзя использовать вместе")
+    raw_source = args.path or args.source
+    if not raw_source:
+        parser.error("не указан исходный КАТАЛОГ или параметр --path")
+    return Path(raw_source)
+
+
+def _run_undo(source: Path, apply: bool, logger: logging.Logger) -> int:
+    try:
+        plan = build_undo_plan(source)
+    except HistoryError as error:
+        logger.error("Ошибка истории: %s", error)
+        return 1
+
+    _print_undo_plan(plan, apply)
+    conflict_errors = tuple(
+        f"{operation.current}: {operation.conflict}" for operation in plan.conflicts
+    )
+    if not apply:
+        summary = ExecutionSummary(
+            len(plan.operations),
+            0,
+            len(plan.conflicts),
+            conflict_errors,
+        )
+        _print_summary(summary)
+        if plan.conflicts:
+            print("Отмена заблокирована: устраните перечисленные конфликты.")
+        else:
+            print("Для выполнения отмены повторите команду с параметром --apply.")
+        return 0
+
+    if plan.conflicts:
+        for operation in plan.conflicts:
+            logger.error("Конфликт отмены: %s: %s", operation.current, operation.conflict)
+        _print_summary(
+            ExecutionSummary(
+                len(plan.operations),
+                0,
+                len(plan.conflicts),
+                conflict_errors,
+            )
+        )
+        return 1
+
+    try:
+        summary = execute_undo(plan)
+    except HistoryError as error:
+        logger.error("Ошибка отмены: %s", error)
+        return 1
+    for error in summary.errors:
+        logger.error("Ошибка обратного перемещения: %s", error)
+    _print_summary(summary)
+    return 1 if summary.errors else 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    source = _resolve_source(parser, args)
+    if args.undo_last and args.recursive:
+        parser.error("параметр --recursive не используется вместе с --undo-last")
     level_name = args.log_level or ("INFO" if args.verbose else "WARNING")
     try:
         configure_logging(level_name, args.log_file)
@@ -170,10 +260,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     logger = logging.getLogger(__name__)
 
+    if args.undo_last:
+        return _run_undo(source, args.apply, logger)
+
     try:
         config = load_config(Path(args.config))
         logger.info("Конфигурация загружена: %s.", args.config)
-        plan = build_plan(Path(args.path), config, recursive=args.recursive)
+        plan = build_plan(source, config, recursive=args.recursive)
         logger.info(
             "План подготовлен: %d операций, пропущено: %d.",
             len(plan.operations),
@@ -191,8 +284,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("Для перемещения файлов повторите команду с параметром --apply.")
         return 0
 
-    summary = execute_plan(plan)
+    try:
+        result = apply_plan_with_history(plan, Path(args.config))
+    except HistoryError as error:
+        logger.error("Ошибка истории: %s", error)
+        return 1
+    summary = result.summary
     logger.info("Выполнение плана завершено: перемещено %d.", summary.moved)
+    if result.history_path is not None:
+        print(f"Журнал операции: {result.history_path}")
     for error in summary.errors:
         logger.error("Ошибка перемещения: %s", error)
     _print_summary(summary)
